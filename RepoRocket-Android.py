@@ -7,7 +7,7 @@ import pygame
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QStackedWidget, QWidget, QScrollArea, QComboBox,
-    QGridLayout, QMenu, QFileDialog, QCheckBox, QProgressBar, QDialog, QListWidget, QListWidgetItem, QSplitter, QMessageBox
+    QGridLayout, QMenu, QFileDialog, QCheckBox, QProgressBar, QDialog, QListWidget, QListWidgetItem, QSplitter, QMessageBox, QTabWidget
 )
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QEvent, QPoint, QUrl
 from PyQt6.QtGui import QPixmap, QIcon, QAction, QPainter, QBrush, QFontDatabase, QKeyEvent
@@ -18,6 +18,7 @@ from steamgrid import SteamGridDB, StyleType, MimeType, ImageType
 import qdarkstyle
 import yaml
 import importlib.util
+from PyQt6.QtAndroidExtras import QAndroidJniObject, QAndroidJniEnvironment, QtAndroid
 
 # Initialize SteamGridDB with your API key
 sgdb = SteamGridDB('40f20195948fb2489554d4c9e5ee8ef9')
@@ -25,6 +26,7 @@ sgdb = SteamGridDB('40f20195948fb2489554d4c9e5ee8ef9')
 class RepoRocket(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.settings = {}  # Initialize settings attribute
         self.setWindowTitle("RepoRocket")
         self.setGeometry(100, 100, 1280, 720)
         self.setWindowIcon(QIcon("img/logo.png"))  # Set the application icon
@@ -47,6 +49,7 @@ class RepoRocket(QMainWindow):
         QTimer.singleShot(0, self.init_gamepad_async)
 
         self.current_focus = None
+        self.installed_apps = self.load_installed_apps()
 
     def create_folder_structure(self):
         os.makedirs("applications", exist_ok=True)
@@ -56,6 +59,10 @@ class RepoRocket(QMainWindow):
         if not os.path.exists(self.error_log_path):
             with open(self.error_log_path, 'w') as f:
                 json.dump([], f)
+        emu_json_path = os.path.join("saves", "reporocket", "emulation.json")
+        if not os.path.exists(emu_json_path):
+            with open(emu_json_path, 'w') as f:
+                json.dump({}, f)
 
     def init_ui(self):
         # Apply default dark theme
@@ -377,9 +384,11 @@ class RepoRocket(QMainWindow):
     def download_file(self, url, repo_name):
         response = requests.get(url, stream=True)
         file_name = url.split("/")[-1]
-        app_folder = os.path.join("applications", repo_name)
-        os.makedirs(app_folder, exist_ok=True)
-        save_path = os.path.join(app_folder, file_name)
+        # Create double folder: applications/app_name/app_name
+        parent_folder = os.path.join("applications", repo_name)
+        child_folder = os.path.join(parent_folder, repo_name)
+        os.makedirs(child_folder, exist_ok=True)
+        save_path = os.path.join(child_folder, file_name)
         
         total_size = int(response.headers.get('content-length', 0))
         self.progress_bar.setMaximum(total_size)
@@ -394,19 +403,49 @@ class RepoRocket(QMainWindow):
 
         self.progress_bar.setVisible(False)
 
-        if zipfile.is_zipfile(save_path):
+        if file_name.endswith(".apk"):
+            self.install_apk(save_path)
+        elif zipfile.is_zipfile(save_path):
             self.repo_description.setText("Extracting files...")
             self.progress_bar.setVisible(True)
             self.unzip_and_clean(save_path, repo_name)
             self.progress_bar.setVisible(False)
-            self.repo_description.setText(f"Downloaded and extracted to {app_folder}")
+            self.repo_description.setText(f"Downloaded and extracted to {child_folder}")
             self.prompt_for_executable(repo_name)
         elif file_name.endswith(".html"):
-            self.repo_description.setText(f"Downloaded HTML file to {app_folder}")
+            self.repo_description.setText(f"Downloaded HTML file to {child_folder}")
             self.display_html_content(save_path)
         else:
-            self.repo_description.setText(f"Downloaded to {app_folder}")
+            self.repo_description.setText(f"Downloaded to {child_folder}")
             self.prompt_for_executable(repo_name)
+
+    def install_apk(self, apk_path):
+        apk_uri = QAndroidJniObject.fromString(apk_path)
+        intent = QAndroidJniObject("android/content/Intent", "(Ljava/lang/String;)V", QAndroidJniObject.getStaticObjectField("android/content/Intent", "ACTION_VIEW", "Ljava/lang/String;").object())
+        intent.callObjectMethod("setDataAndType", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/content/Intent;", apk_uri.object(), QAndroidJniObject.fromString("application/vnd.android.package-archive").object())
+        intent.callObjectMethod("setFlags", "(I)Landroid/content/Intent;", 0x10000000)  # FLAG_ACTIVITY_NEW_TASK
+        QtAndroid.startActivity(intent, 101, self)
+
+    def handleActivityResult(self, requestCode, resultCode, data):
+        if requestCode == 101:
+            if resultCode == -1:  # RESULT_OK
+                QMessageBox.information(self, "Installation", "APK installed successfully.")
+                # Optionally, add to installed apps list
+                # self.installed_apps[package_name] = {"path": apk_path, "name": app_name}
+                # self.save_installed_apps()
+            else:
+                QMessageBox.warning(self, "Installation", "APK installation failed.")
+
+    def launch_app(self, package_name):
+        intent = QAndroidJniObject("android/content/Intent", "(Ljava/lang/String;)V", QAndroidJniObject.getStaticObjectField("android/content/Intent", "ACTION_MAIN", "Ljava/lang/String;").object())
+        intent.callObjectMethod("setPackage", "(Ljava/lang/String;)Landroid/content/Intent;", QAndroidJniObject.fromString(package_name).object())
+        QtAndroid.startActivity(intent, 102, self)
+
+    def uninstall_app(self, package_name):
+        uri = QAndroidJniObject.callStaticObjectMethod("android/net/Uri", "parse", "(Ljava/lang/String;)Landroid/net/Uri;", QAndroidJniObject.fromString(f"package:{package_name}").object())
+        intent = QAndroidJniObject("android/content/Intent", "(Ljava/lang/String;)V", QAndroidJniObject.getStaticObjectField("android/content/Intent", "ACTION_UNINSTALL_PACKAGE", "Ljava/lang/String;").object())
+        intent.callObjectMethod("setData", "(Landroid/net/Uri;)Landroid/content/Intent;", uri.object())
+        QtAndroid.startActivity(intent, 103, self)
 
     def display_html_content(self, html_path):
         self.html_viewer = QWebEngineView()
@@ -415,7 +454,8 @@ class RepoRocket(QMainWindow):
         self.main_content.setCurrentWidget(self.html_viewer)
 
     def unzip_and_clean(self, zip_path, repo_name):
-        extract_path = os.path.join("applications", repo_name)
+        # Extract into the double folder: applications/app_name/app_name
+        extract_path = os.path.join("applications", repo_name, repo_name)
         os.makedirs(extract_path, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             total_files = len(zip_ref.infolist())
@@ -462,7 +502,8 @@ class RepoRocket(QMainWindow):
                 border: 1px solid #5e5e5e;
             }
         """)
-        app_folder = os.path.join("applications", repo_name)
+        # Use the double folder for scanning executables.
+        app_folder = os.path.join("applications", repo_name, repo_name)
         for root, dirs, files in os.walk(app_folder):
             for file in files:
                 if file.endswith((".exe", ".bat", ".sh", ".appimage", ".app")):
@@ -589,9 +630,10 @@ class RepoRocket(QMainWindow):
         else:
             button.setText(app_name)
 
-        button.clicked.connect(lambda: self.launch_app(app_name))
+        button.clicked.connect(lambda: self.launch_app(app_name) if self.is_android() else self.launch_app(self.config[app_name]["executable"]))
         button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         button.customContextMenuRequested.connect(lambda pos: self.show_context_menu(pos, app_name, button))
+        button.installEventFilter(self)
 
         return button
 
@@ -758,17 +800,22 @@ class RepoRocket(QMainWindow):
             print(error_message)
 
     def launch_app(self, app_name):
-        executable_path = self.config.get(app_name, {}).get("executable")
-        if executable_path and os.path.exists(executable_path):
-            try:
-                os.startfile(executable_path)
-            except OSError as e:
-                error_message = f"Error launching app: {e}\n{traceback.format_exc()}"
-                self.log_error(error_message)
-                if e.errno == 5:  # Access is denied
-                    self.prompt_for_executable(app_name)
-                else:
-                    raise
+        if self.is_android():
+            package_name = self.installed_apps.get(app_name, {}).get("package_name")
+            if package_name:
+                self.launch_app(package_name)
+        else:
+            executable_path = self.config.get(app_name, {}).get("executable")
+            if executable_path and os.path.exists(executable_path):
+                try:
+                    os.startfile(executable_path)
+                except OSError as e:
+                    error_message = f"Error launching app: {e}\n{traceback.format_exc()}"
+                    self.log_error(error_message)
+                    if e.errno == 5:  # Access is denied
+                        self.prompt_for_executable(app_name)
+                    else:
+                        raise
 
     def create_settings_page(self):
         page = QWidget()
@@ -796,6 +843,19 @@ class RepoRocket(QMainWindow):
         self.fullscreen_selector.setCurrentText("Windowed" if not self.isFullScreen() else "Fullscreen")
         self.fullscreen_selector.currentIndexChanged.connect(self.toggle_fullscreen)
         layout.addWidget(self.fullscreen_selector)
+
+        # Emulation section label and dropdown toggle
+        emu_label = QLabel("Emulation")
+        emu_label.setStyleSheet("font-size: 18px; font-family: Arial; color: white;")
+        layout.addWidget(emu_label)
+
+        emu_dropdown = QComboBox()
+        emu_dropdown.addItems(["Off", "On"])
+        emu_dropdown.setStyleSheet("font-size: 18px; font-family: Arial; padding: 10px;")
+        current_emu = "On" if self.settings.get("enable_emulation", False) else "Off"
+        emu_dropdown.setCurrentText(current_emu)
+        emu_dropdown.currentTextChanged.connect(lambda text: self.toggle_emulation_dropdown(text))
+        layout.addWidget(emu_dropdown)
 
         import_rrct_button = QPushButton("Import RRCT")
         import_rrct_button.setStyleSheet("""
@@ -873,7 +933,7 @@ class RepoRocket(QMainWindow):
             try:
                 with open(self.config_path, "r") as f:
                     content = f.read().strip()
-                    if content:
+                    if (content):
                         self.config = json.loads(content)
                     else:
                         self.config = {}
@@ -891,6 +951,8 @@ class RepoRocket(QMainWindow):
             try:
                 with open(self.settings_path, "r") as f:
                     settings = json.load(f)
+                    # Save settings to self.settings for later use
+                    self.settings = settings
                     theme = settings.get("theme", "Default Dark")
                     self.theme_selector.setCurrentText(theme)
                     self.change_theme(self.theme_selector.currentIndex())
@@ -906,13 +968,14 @@ class RepoRocket(QMainWindow):
                 self.save_settings()
 
     def save_settings(self):
-        settings = {
-            "theme": self.theme_selector.currentText(),
-            "fullscreen": self.fullscreen_selector.currentText(),
-            "repo_source": self.repo_selector.currentText()
-        }
+        # Ensure self.settings exists
+        if not hasattr(self, "settings"):
+            self.settings = {}
+        self.settings["theme"] = self.theme_selector.currentText()
+        self.settings["fullscreen"] = self.fullscreen_selector.currentText()
+        self.settings["repo_source"] = self.repo_selector.currentText()
         with open(self.settings_path, "w") as f:
-            json.dump(settings, f, indent=4)
+            json.dump(self.settings, f, indent=4)
 
     def add_cloud_save_location(self, app_name):
         file_dialog = QFileDialog(self)
@@ -925,7 +988,7 @@ class RepoRocket(QMainWindow):
 
     def sync_cloud_save(self, app_name):
         cloud_save_location = self.config.get(app_name, {}).get('cloud_save_location')
-        if cloud_save_location:
+        if (cloud_save_location):
             save_folder = os.path.join("saves", app_name)
             os.makedirs(save_folder, exist_ok=True)
             for item in os.listdir(cloud_save_location):
@@ -952,6 +1015,11 @@ class RepoRocket(QMainWindow):
         delete_action = QAction("Delete", self)
         delete_action.triggered.connect(lambda: self.delete_application(app_name))
         menu.addAction(delete_action)
+
+        if self.is_android():
+            uninstall_action = QAction("Uninstall", self)
+            uninstall_action.triggered.connect(lambda: self.uninstall_app(app_name))
+            menu.addAction(uninstall_action)
 
         menu.exec(button.mapToGlobal(pos))
 
@@ -1056,6 +1124,14 @@ class RepoRocket(QMainWindow):
             elif event.key() == Qt.Key.Key_Return:
                 self.activate_focused_widget()
                 return True
+        elif event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            self.long_press_timer = QTimer(self)
+            self.long_press_timer.setSingleShot(True)
+            self.long_press_timer.timeout.connect(lambda: self.show_context_menu(event.pos(), obj.text(), obj))
+            self.long_press_timer.start(500)  # 500 ms for long press
+        elif event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if hasattr(self, "long_press_timer") and self.long_press_timer.isActive():
+                self.long_press_timer.stop()
         return super().eventFilter(obj, event)
 
     def load_themes(self):
@@ -1136,6 +1212,235 @@ class RepoRocket(QMainWindow):
                             module.init_plugin(self)
                     except Exception as e:
                         self.log_error(f"Failed loading plugin {folder}: {e}\n{traceback.format_exc()}")
+
+    def toggle_emulation(self, state):
+        enabled = state == Qt.CheckState.Checked
+        self.settings["enable_emulation"] = enabled
+        self.save_settings()
+        if enabled:
+            # Initialize the emulation config (prompts for folder if needed)
+            self.load_emulation_config()
+            # Add Emulation tab if not already added.
+            if not hasattr(self, "emulation_page"):
+                self.emulation_page = self.create_emulation_page()
+                self.main_content.addWidget(self.emulation_page)
+                self.add_button("Emulation", self.show_emulation_page)
+
+    def load_emulation_config(self):
+        emu_json_path = os.path.join("saves", "reporocket", "emulation.json")
+        try:
+            with open(emu_json_path, "r") as f:
+                config = json.load(f)
+        except:
+            config = {}
+        if "emulation_path" not in config or not os.path.exists(config["emulation_path"]):
+            folder = QFileDialog.getExistingDirectory(self, "Select folder for Emulation")
+            if folder:
+                emu_folder = os.path.join(folder, "Emulation")
+                os.makedirs(emu_folder, exist_ok=True)
+                roms_folder = os.path.join(emu_folder, "roms")
+                os.makedirs(roms_folder, exist_ok=True)
+                for console in ["Switch", "PSX", "PS4", "PS2", "Xbox", "Xbox-360", "NES", "GBA"]:
+                    os.makedirs(os.path.join(roms_folder, console), exist_ok=True)
+                config["emulation_path"] = emu_folder
+                with open(emu_json_path, "w") as f:
+                    json.dump(config, f, indent=4)
+        return config
+
+    def create_emulation_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        # Top section: if no valid folder set, show a "Select Emulation Folder" button and a "GO" button.
+        emu_config = self.load_emulation_config()
+        self.emu_path_label = QLabel()
+        self.emu_path_label.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
+        layout.addWidget(self.emu_path_label)
+        if not emu_config.get("emulation_path") or not os.path.exists(emu_config.get("emulation_path")):
+            select_button = QPushButton("Select Emulation Folder")
+            select_button.setStyleSheet("font-size: 16px; font-family: Arial;")
+            select_button.clicked.connect(self.select_emulation_folder)
+            layout.addWidget(select_button)
+            go_button = QPushButton("GO")
+            go_button.setStyleSheet("font-size: 16px; font-family: Arial;")
+            go_button.clicked.connect(self.create_emulation_directories)
+            layout.addWidget(go_button)
+        else:
+            self.emu_path_label.setText(f"Emulation folder set to: {emu_config.get('emulation_path')}")
+            # Ensure directories exist
+            self.check_emulation_directories()
+        # Then add the tab widget for consoles (tiles).
+        self.emu_tab_widget = QTabWidget()
+        consoles = ["Switch", "PSX", "PSP", "PS4", "PS2", "Xbox", "Xbox-360", "NES", "GBA"]
+        for console in consoles:
+            tab = QWidget()
+            tab_layout = QVBoxLayout()
+            list_widget = QListWidget()
+            list_widget.setStyleSheet("font-size: 16px; font-family: Arial; padding: 10px;")
+            # For PSP tab, pre-add two games.
+            if console == "PSP":
+                # Create item for GTA Vice City Stories
+                item1 = QListWidgetItem("GTA Vice City Stories")
+                item1.setData(Qt.ItemDataRole.UserRole, "https://example.com/gta_vcs.psp")
+                list_widget.addItem(item1)
+                # Create item for GTA Liberty City Stories with new URL:
+                item2 = QListWidgetItem("GTA Liberty City Stories")
+                item2.setData(
+                    Qt.ItemDataRole.UserRole,
+                    "http://downloads.kevin-allen.org/downloads/psp/Grand Theft Auto - Liberty City Stories (USA) (En,Fr,De,Es,It) (v1.05).iso"
+                )
+                list_widget.addItem(item2)
+            # Existing behavior: double-click to download game.
+            list_widget.itemDoubleClicked.connect(lambda item, console=console: self.show_emulation_game_details(console, item.data(Qt.ItemDataRole.UserRole), item.text()))
+            tab_layout.addWidget(list_widget)
+            tab.setLayout(tab_layout)
+            self.emu_tab_widget.addTab(tab, console)
+        layout.addWidget(self.emu_tab_widget)
+        page.setLayout(layout)
+        return page
+
+    def select_emulation_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select folder for Emulation")
+        if folder:
+            self.temp_emulation_folder = folder  # store temporarily
+            self.emu_path_label.setText(f"Selected folder: {folder}")
+
+    def create_emulation_directories(self):
+        # Called when user clicks "GO" in Emulation tab.
+        if hasattr(self, "temp_emulation_folder"):
+            emu_folder = os.path.join(self.temp_emulation_folder, "Emulation")
+            os.makedirs(emu_folder, exist_ok=True)
+            roms_folder = os.path.join(emu_folder, "roms")
+            os.makedirs(roms_folder, exist_ok=True)
+            for console in ["Switch", "PSX", "PS4", "PS2", "Xbox", "Xbox-360", "NES", "GBA"]:
+                os.makedirs(os.path.join(roms_folder, console), exist_ok=True)
+            # Save to emulation.json
+            emu_json_path = os.path.join("saves", "reporocket", "emulation.json")
+            config = {"emulation_path": emu_folder}
+            with open(emu_json_path, "w") as f:
+                json.dump(config, f, indent=4)
+            self.emu_path_label.setText(f"Emulation folder set to: {emu_folder}")
+        else:
+            QMessageBox.warning(self, "Warning", "No folder selected.")
+
+    def show_emulation_page(self):
+        # When user selects Emulation tab from sidebar, check directories.
+        self.check_emulation_directories()
+        self.main_content.setCurrentWidget(self.emulation_page)
+
+    def toggle_emulation_dropdown(self, text):
+        enabled = (text == "On")
+        self.settings["enable_emulation"] = enabled
+        self.save_settings()
+        # Do not immediately prompt for folder.
+        if enabled:
+            # If emulation tab is not added, add it.
+            if not hasattr(self, "emulation_page"):
+                self.emulation_page = self.create_emulation_page()
+                self.main_content.addWidget(self.emulation_page)
+                self.add_button("Emulation", self.show_emulation_page)
+        # Optionally, handle "Off" by removing tab if desired.
+
+    def check_emulation_directories(self):
+        # Called when entering the Emulation tab.
+        config = self.load_emulation_config()
+        # config["emulation_path"] should already hold the saved path.
+        # If not, no action is taken.
+        emu_path = config.get("emulation_path")
+        if emu_path:
+            roms_folder = os.path.join(emu_path, "roms")
+            os.makedirs(roms_folder, exist_ok=True)
+            for console in ["Switch", "PSX", "PS4", "PS2", "Xbox", "Xbox-360", "NES", "GBA"]:
+                os.makedirs(os.path.join(roms_folder, console), exist_ok=True)
+
+    def download_emulation_game(self, console, url):
+        emu_config = self.load_emulation_config()
+        roms_dir = os.path.join(emu_config["emulation_path"], "roms", console)
+        os.makedirs(roms_dir, exist_ok=True)
+        file_name = url.split("/")[-1]
+        save_path = os.path.join(roms_dir, file_name)
+        try:
+            response = requests.get(url, stream=True)
+            with open(save_path, "wb") as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            QMessageBox.information(self, "Download", f"Downloaded game to {save_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to download game: {e}")
+
+    def show_emulation_game_details(self, console, url, game_title):
+        # Build a new page to show details about the selected game.
+        self.emu_game_page = QWidget()
+        layout = QVBoxLayout()
+        title_label = QLabel(game_title)
+        title_label.setStyleSheet("font-size: 20px; font-family: Arial; color: white;")
+        layout.addWidget(title_label)
+        desc_label = QLabel(f"Description: {game_title} details not available.")
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
+        layout.addWidget(desc_label)
+        # Artwork placeholder; replace 'img/placeholder.png' with your actual artwork path.
+        artwork_label = QLabel()
+        artwork = QPixmap("img/placeholder.png")
+        if not artwork.isNull():
+            artwork = artwork.scaled(400, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            artwork_label.setPixmap(artwork)
+        layout.addWidget(artwork_label)
+        # Download button
+        download_btn = QPushButton("Download Game")
+        download_btn.setStyleSheet("font-size: 18px; font-family: Arial; padding: 10px;")
+        download_btn.clicked.connect(lambda: self.download_emulation_game_with_progress(console, url))
+        layout.addWidget(download_btn)
+        # Back button
+        back_btn = QPushButton("Back to Emulation")
+        back_btn.setStyleSheet("font-size: 16px; font-family: Arial;")
+        back_btn.clicked.connect(lambda: self.main_content.setCurrentWidget(self.emu_tab_widget.parentWidget()))
+        layout.addWidget(back_btn)
+        self.emu_game_page.setLayout(layout)
+        self.main_content.addWidget(self.emu_game_page)
+        self.main_content.setCurrentWidget(self.emu_game_page)
+
+    def download_emulation_game_with_progress(self, console, url):
+        config = self.load_emulation_config()
+        roms_dir = os.path.join(config["emulation_path"], "roms", console)
+        os.makedirs(roms_dir, exist_ok=True)
+        file_name = url.split("/")[-1]
+        save_path = os.path.join(roms_dir, file_name)
+        try:
+            response = requests.get(url, stream=True)
+            total_size = int(response.headers.get('content-length', 0))
+            self.progress_bar.setMaximum(total_size)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+            with open(save_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+                        self.progress_bar.setValue(self.progress_bar.value() + len(chunk))
+            self.progress_bar.setVisible(False)
+            QMessageBox.information(self, "Download", f"Downloaded game to {save_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to download game: {e}")
+
+    def load_installed_apps(self):
+        installed_apps_path = os.path.join("saves", "reporocket", "installed_apps.json")
+        if os.path.exists(installed_apps_path):
+            with open(installed_apps_path, "r") as f:
+                return json.load(f)
+        return {}
+
+    def save_installed_apps(self):
+        installed_apps_path = os.path.join("saves", "reporocket", "installed_apps.json")
+        with open(installed_apps_path, "w") as f:
+            json.dump(self.installed_apps, f, indent=4)
+
+    def is_android(self):
+        return sys.platform == "android"
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.show_context_menu(event.pos(), self.current_focus.text(), self.current_focus)
+        elif event.button() == Qt.MouseButton.LeftButton:
+            super().mouseReleaseEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -7,3 +7,5 @@ qdarkstyle
 PyQt6-WebEngine
 pyyaml
 PyGame
+buildozer
+cython
