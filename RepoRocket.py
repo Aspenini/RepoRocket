@@ -40,6 +40,7 @@ class RepoRocket(QMainWindow):
         self.status_bar.addPermanentWidget(self.progress_bar)
         self.progress_bar.setVisible(False)
         self.load_config()
+        self.settings = {}
         self.load_settings()
         self.load_plugins()
 
@@ -247,6 +248,11 @@ class RepoRocket(QMainWindow):
         self.repo_description.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
         layout.addWidget(self.repo_description)
 
+        self.github_actions_toggle = QCheckBox("Enable GitHub Actions")
+        self.github_actions_toggle.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
+        self.github_actions_toggle.stateChanged.connect(self.toggle_github_actions)
+        layout.addWidget(self.github_actions_toggle)
+
         self.release_selector = QComboBox()
         self.release_selector.setStyleSheet("font-size: 16px; font-family: Arial; padding: 5px;")
         self.release_selector.currentIndexChanged.connect(self.populate_files)
@@ -296,6 +302,89 @@ class RepoRocket(QMainWindow):
         page.setLayout(layout)
         return page
 
+    def toggle_github_actions(self, state):
+        self.settings["github_actions_enabled"] = state == Qt.CheckState.Checked
+        self.save_settings()
+        self.show_repo_details(self.current_repo)
+
+    def fetch_github_actions(self):
+        self.release_selector.clear()
+        try:
+            owner = self.current_repo['owner']['login']
+            repo_name = self.current_repo['name']
+            api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows"
+            response = requests.get(api_url)
+            if response.status_code == 200:
+                workflows = response.json().get("workflows", [])
+                for workflow in workflows:
+                    self.release_selector.addItem(workflow['name'], workflow['id'])
+                if not workflows:
+                    self.release_selector.addItem("No workflows available", None)
+            else:
+                self.release_selector.addItem("Error fetching workflows", None)
+        except Exception as e:
+            self.release_selector.addItem(f"Error: {e}", None)
+
+    def fetch_releases(self):
+        self.release_selector.clear()
+          try:
+            owner = self.current_repo['owner']['login']
+            repo_name = self.current_repo['name']
+            api_url = f"https://api.github.com/repos/{owner}/{repo_name}/releases"
+            response = requests.get(api_url)
+            if response.status_code == 200:
+                releases = response.json()
+                for release in releases:
+                    self.release_selector.addItem(release['tag_name'], release['assets'])
+                if not releases:
+                    self.release_selector.addItem("No releases available", None)
+            else:
+                self.release_selector.addItem("Error fetching releases", None)
+        except Exception as e:
+            self.release_selector.addItem(f"Error: {e}", None)
+
+    def populate_files(self):
+        self.file_selector.clear()
+        if self.github_actions_toggle.isChecked():
+            self.populate_github_action_artifacts()
+        else:
+            self.populate_release_files()
+
+    def populate_github_action_artifacts(self):
+        workflow_id = self.release_selector.currentData()
+        if workflow_id:
+            try:
+                owner = self.current_repo['owner']['login']
+                repo_name = self.current_repo['name']
+                api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/runs?workflow_id={workflow_id}"
+                response = requests.get(api_url)
+                if response.status_code == 200:
+                    runs = response.json().get("workflow_runs", [])
+                    if runs:
+                        latest_run_id = runs[0]['id']
+                        artifacts_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/runs/{latest_run_id}/artifacts"
+                        artifacts_response = requests.get(artifacts_url)
+                        if artifacts_response.status_code == 200:
+                            artifacts = artifacts_response.json().get("artifacts", [])
+                            for artifact in artifacts:
+                                self.file_selector.addItem(artifact['name'], artifact['archive_download_url'])
+                            if not artifacts:
+                                self.file_selector.addItem("No artifacts available", None)
+                        else:
+                            self.file_selector.addItem("Error fetching artifacts", None)
+                    else:
+                        self.file_selector.addItem("No workflow runs available", None)
+                else:
+                    self.file_selector.addItem("Error fetching workflow runs", None)
+            except Exception as e:
+                self.file_selector.addItem(f"Error: {e}", None)
+
+    def populate_release_files(self):
+        assets = self.release_selector.currentData()
+        if assets:
+            for asset in assets:
+                self.file_selector.addItem(asset['name'], asset['browser_download_url'])
+
     def show_repo_details(self, repo):
         self.current_repo = repo
         if self.repo_selector.currentText() == "GitHub":
@@ -311,53 +400,14 @@ class RepoRocket(QMainWindow):
         self.repo_title.setText(repo_name)
         self.repo_description.setText(repo.get('description', 'No description available.'))
 
-        # Fetch releases
-        self.release_selector.clear()
-        try:
-            if self.repo_selector.currentText() == "GitHub":
-                api_url = f"https://api.github.com/repos/{owner}/{repo_name}/releases"
-            elif self.repo_selector.currentText() == "GitLab":
-                api_url = f"https://gitlab.com/api/v4/projects/{repo['id']}/releases"
-            elif self.repo_selector.currentText() == "Internet Archive":
-                api_url = f"https://archive.org/metadata/{repo['identifier']}"
-
-            response = requests.get(api_url)
-            if response.status_code == 200:
-                if self.repo_selector.currentText() == "GitHub":
-                    releases = response.json()
-                elif self.repo_selector.currentText() == "GitLab":
-                    releases = response.json()
-                elif self.repo_selector.currentText() == "Internet Archive":
-                    releases = response.json().get("files", [])
-
-                for release in releases:
-                    if self.repo_selector.currentText() == "GitHub":
-                        self.release_selector.addItem(release['tag_name'], release['assets'])
-                    elif self.repo_selector.currentText() == "GitLab":
-                        self.release_selector.addItem(release['tag_name'], release['assets'])
-                    elif self.repo_selector.currentText() == "Internet Archive":
-                        if release['format'] not in ["Metadata", "Text", "Item Image"]:
-                            self.release_selector.addItem(release['name'], release['name'])
-
-                if not releases:
-                    self.release_selector.addItem("No releases available", None)
-            else:
-                self.release_selector.addItem("Error fetching releases", None)
-        except Exception as e:
-            self.release_selector.addItem(f"Error: {e}", None)
+        if self.settings.get("github_actions_enabled", False):
+            self.github_actions_toggle.setChecked(True)
+            self.fetch_github_actions()
+        else:
+            self.github_actions_toggle.setChecked(False)
+            self.fetch_releases()
 
         self.main_content.setCurrentWidget(self.repo_detail_page)
-
-    def populate_files(self):
-        self.file_selector.clear()
-        assets = self.release_selector.currentData()
-        if assets:
-            if self.repo_selector.currentText() in ["GitHub", "GitLab"]:
-                for asset in assets:
-                    self.file_selector.addItem(asset['name'], asset['browser_download_url'])
-            elif self.repo_selector.currentText() == "Internet Archive":
-                for asset in assets:
-                    self.file_selector.addItem(asset, f"https://archive.org/download/{self.current_repo['identifier']}/{asset}")
 
     def download_selected_file(self):
         selected_url = self.file_selector.currentData()
@@ -902,6 +952,8 @@ class RepoRocket(QMainWindow):
                         self.showNormal()
                     repo_source = settings.get("repo_source", "GitHub")
                     self.repo_selector.setCurrentText(repo_source)
+                    github_actions_enabled = settings.get("github_actions_enabled", False)
+                    self.github_actions_toggle.setChecked(github_actions_enabled)
             except json.JSONDecodeError:
                 self.save_settings()
 
@@ -909,7 +961,8 @@ class RepoRocket(QMainWindow):
         settings = {
             "theme": self.theme_selector.currentText(),
             "fullscreen": self.fullscreen_selector.currentText(),
-            "repo_source": self.repo_selector.currentText()
+            "repo_source": self.repo_selector.currentText(),
+            "github_actions_enabled": self.github_actions_toggle.isChecked()
         }
         with open(self.settings_path, "w") as f:
             json.dump(settings, f, indent=4)
