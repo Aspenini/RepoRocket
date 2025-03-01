@@ -248,11 +248,6 @@ class RepoRocket(QMainWindow):
         self.repo_description.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
         layout.addWidget(self.repo_description)
 
-        self.github_actions_toggle = QCheckBox("Enable GitHub Actions")
-        self.github_actions_toggle.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
-        self.github_actions_toggle.stateChanged.connect(self.toggle_github_actions)
-        layout.addWidget(self.github_actions_toggle)
-
         self.release_selector = QComboBox()
         self.release_selector.setStyleSheet("font-size: 16px; font-family: Arial; padding: 5px;")
         self.release_selector.currentIndexChanged.connect(self.populate_files)
@@ -327,7 +322,7 @@ class RepoRocket(QMainWindow):
 
     def fetch_releases(self):
         self.release_selector.clear()
-          try:
+        try:
             owner = self.current_repo['owner']['login']
             repo_name = self.current_repo['name']
             api_url = f"https://api.github.com/repos/{owner}/{repo_name}/releases"
@@ -345,7 +340,7 @@ class RepoRocket(QMainWindow):
 
     def populate_files(self):
         self.file_selector.clear()
-        if self.github_actions_toggle.isChecked():
+        if self.settings.get("github_actions_enabled", False):
             self.populate_github_action_artifacts()
         else:
             self.populate_release_files()
@@ -401,10 +396,8 @@ class RepoRocket(QMainWindow):
         self.repo_description.setText(repo.get('description', 'No description available.'))
 
         if self.settings.get("github_actions_enabled", False):
-            self.github_actions_toggle.setChecked(True)
             self.fetch_github_actions()
         else:
-            self.github_actions_toggle.setChecked(False)
             self.fetch_releases()
 
         self.main_content.setCurrentWidget(self.repo_detail_page)
@@ -846,6 +839,12 @@ class RepoRocket(QMainWindow):
         self.fullscreen_selector.setCurrentText("Windowed" if not self.isFullScreen() else "Fullscreen")
         self.fullscreen_selector.currentIndexChanged.connect(self.toggle_fullscreen)
         layout.addWidget(self.fullscreen_selector)
+
+        # GitHub Actions toggle
+        self.github_actions_toggle = QCheckBox("Enable GitHub Actions")
+        self.github_actions_toggle.setStyleSheet("font-size: 16px; font-family: Arial; color: white;")
+        self.github_actions_toggle.stateChanged.connect(self.toggle_github_actions)
+        layout.addWidget(self.github_actions_toggle)
 
         import_rrct_button = QPushButton("Import RRCT")
         import_rrct_button.setStyleSheet("""
