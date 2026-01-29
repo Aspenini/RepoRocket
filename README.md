@@ -1,5 +1,7 @@
 # RepoRocket 🚀
 
+(OLD PYTHON)
+
 **RepoRocket** is a cross-platform application manager that allows users to **install, update, and organize software directly from GitHub, GitLab, and other Git-based repositories**. Designed for flexibility, it simplifies managing open-source applications while offering customization options for users.
 
 ## 🔹 Features:
