@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write  # Ensure the GITHUB_TOKEN has write permissions for contents
+  contents: write
 
 jobs:
   build-windows:
@@ -15,31 +15,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.9"
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Print working directory and list files
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package Windows build
         run: |
-          echo "Current directory: $(pwd)"
-          echo "Listing files:"
-          ls -R
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run Windows build script
-        run: scripts/compile_windows.bat
-
-      - name: Zip Windows build
-        run: |
-          if (Test-Path -Path dist) {
-            cd dist
-            Compress-Archive -Path * -DestinationPath ../RepoRocket-Windows.zip
-          } else {
-            Write-Error "dist directory not found"
-          }
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target/release/reporocket.exe dist/RepoRocket.exe
+          if (Test-Path img) { Copy-Item img dist/img -Recurse }
+          Compress-Archive -Path dist/* -DestinationPath RepoRocket-Windows.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -53,30 +43,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Print working directory and list files
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "Listing files:"
-          ls -R
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
 
       - name: Install Linux dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential zip
+        run: sudo apt-get update && sudo apt-get install -y build-essential zip libgtk-3-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev
 
-      - name: Run Linux build script
-        run: bash scripts/compile_linux.sh
+      - name: Build release
+        run: cargo build --release
 
-      - name: Zip Linux build
+      - name: Package Linux build
         run: |
-          if [ -d "dist" ]; then
-            cd dist
-            zip -r ../RepoRocket-Linux.zip *
-          else
-            echo "dist directory not found" >&2
-            exit 1
-          fi
+          mkdir -p dist
+          cp target/release/reporocket dist/RepoRocket
+          if [ -d img ]; then cp -r img dist/img; fi
+          cd dist
+          zip -r ../RepoRocket-Linux.zip *
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4

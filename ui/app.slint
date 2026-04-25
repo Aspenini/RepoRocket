@@ -1,0 +1,1343 @@
+import { CheckBox, LineEdit, ListView } from "std-widgets.slint";
+
+export struct RepoRow {
+    title: string,
+    subtitle: string,
+    description: string,
+}
+
+export struct OptionRow {
+    title: string,
+    subtitle: string,
+}
+
+export struct LibraryRow {
+    name: string,
+    executable: string,
+    has_artwork: bool,
+    artwork: image,
+}
+
+export struct ArtworkGameRow {
+    name: string,
+    subtitle: string,
+}
+
+export struct ArtworkImageRow {
+    url: string,
+    dimensions: string,
+    has_preview: bool,
+    preview: image,
+}
+
+export struct ThemeRow {
+    name: string,
+}
+
+component NavButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected: false;
+    callback clicked;
+
+    height: 48px;
+    border-radius: 6px;
+    background: selected ? #2f5f8f : touch.has-hover ? #252d38 : transparent;
+
+    Text {
+        x: 14px;
+        y: 0px;
+        width: parent.width - 28px;
+        height: parent.height;
+        text: root.text;
+        color: #f4f7fb;
+        vertical-alignment: center;
+        font-size: 16px;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    height: 38px;
+    min-width: 92px;
+    border-radius: 6px;
+    background: !enabled ? #222831 : danger ? (touch.has-hover ? #963d3d : #713333) : primary ? (touch.has-hover ? #3477b8 : #2f5f8f) : (touch.has-hover ? #303a47 : #252d38);
+    border-width: 1px;
+    border-color: !enabled ? #30343b : primary ? #458fd1 : #3d4652;
+
+    Text {
+        x: 12px;
+        y: 0px;
+        width: parent.width - 24px;
+        height: parent.height;
+        text: root.text;
+        color: enabled ? #f6f8fb : #7c8591;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        font-size: 14px;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            if root.enabled {
+                root.clicked();
+            }
+        }
+    }
+}
+
+component BigDeleteButton inherits Rectangle {
+    in property <string> text;
+    callback clicked;
+
+    height: 68px;
+    border-radius: 8px;
+    background: touch.has-hover ? #c52f2f : #a82020;
+    border-width: 2px;
+    border-color: #ff6b6b;
+
+    Text {
+        x: 18px;
+        y: 0px;
+        width: parent.width - 36px;
+        height: parent.height;
+        text: root.text;
+        color: white;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        font-size: 24px;
+        font-weight: 800;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component SectionTitle inherits Text {
+    in property <color> title_color: #f6f8fb;
+    color: title_color;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+component EmptyState inherits Rectangle {
+    in property <string> message;
+    height: 90px;
+    border-radius: 8px;
+    background: #18202a;
+    border-width: 1px;
+    border-color: #283241;
+
+    Text {
+        width: parent.width - 32px;
+        height: parent.height;
+        x: 16px;
+        text: root.message;
+        color: #aeb8c5;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        font-size: 15px;
+        wrap: word-wrap;
+    }
+}
+
+export component AppWindow inherits Window {
+    width: 1280px;
+    height: 720px;
+    title: "RepoRocket";
+    background: background_color;
+
+    in-out property <int> page: 0;
+    in-out property <int> provider_index: 0;
+    in-out property <string> search_query;
+    in-out property <string> artwork_query;
+    in-out property <int> selected_release: -1;
+    in-out property <int> selected_file: -1;
+    in-out property <int> artwork_page: 0;
+    in-out property <bool> fullscreen_enabled: false;
+    in-out property <string> steamgriddb_api_key;
+
+    in property <[RepoRow]> repo_results;
+    in property <[OptionRow]> release_options;
+    in property <[OptionRow]> file_options;
+    in property <[LibraryRow]> library_apps;
+    in property <[OptionRow]> executable_options;
+    in property <[ArtworkGameRow]> artwork_games;
+    in property <[ArtworkImageRow]> artwork_images;
+    in property <[ThemeRow]> themes;
+
+    in property <string> status_text: "Ready";
+    in property <string> repo_title;
+    in property <string> repo_description;
+    in property <string> current_app_name;
+    in-out property <bool> pending_delete_visible: false;
+    in-out property <int> pending_delete_index: -1;
+    in-out property <string> pending_delete_name;
+    in-out property <bool> pending_download_visible: false;
+    in-out property <int> pending_download_release: -1;
+    in-out property <int> pending_download_file: -1;
+    in-out property <string> pending_download_name;
+    in-out property <string> pending_download_original;
+    in property <bool> busy: false;
+    in property <float> progress: 0;
+    in property <bool> progress_visible: false;
+
+    in property <color> background_color: #101419;
+    in property <color> panel_color: #0b0f14;
+    in property <color> surface_color: #17202b;
+    in property <color> text_color: #f6f8fb;
+    in property <color> muted_text_color: #aeb8c5;
+    in property <color> accent_color: #2f5f8f;
+    in property <color> border_color: #283241;
+    in property <color> hover_surface_color: #202a37;
+    in property <color> selected_surface_color: #284b72;
+    in property <color> placeholder_color: #222b36;
+    in property <color> progress_track_color: #202832;
+    in property <color> overlay_color: #050607;
+    in property <color> modal_color: #1b222c;
+    in property <color> danger_color: #d64040;
+    in property <color> danger_text_color: #ff5a5a;
+
+    callback request_search(string, int);
+    callback request_repo_details(int);
+    callback request_release_selected(int);
+    callback request_file_selected(int);
+    callback request_download(int, int);
+    callback request_download_named(int, int, string);
+    callback request_library_refresh();
+    callback request_launch_app(int);
+    callback request_delete_app(int);
+    callback request_change_artwork(int);
+    callback request_choose_cloud_save(int);
+    callback request_artwork_search(string);
+    callback request_artwork_game(int);
+    callback request_artwork_delta(int);
+    callback request_apply_artwork(int);
+    callback request_select_executable(int);
+    callback request_page(int);
+    callback request_save_settings(string, bool);
+    callback request_theme(int);
+    callback request_sync_cloud_save(int);
+
+    function open_page(index: int) {
+        page = index;
+        request_page(index);
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            width: 216px;
+            background: panel_color;
+
+            VerticalLayout {
+                x: 16px;
+                y: 18px;
+                width: parent.width - 32px;
+                height: parent.height - 36px;
+                spacing: 10px;
+
+                Text {
+                    text: "RepoRocket";
+                    color: text_color;
+                    font-size: 24px;
+                    font-weight: 800;
+                    height: 42px;
+                    vertical-alignment: center;
+                }
+
+                NavButton {
+                    width: parent.width;
+                    text: "Search";
+                    selected: page == 0 || page == 1 || page == 4 || page == 5 || page == 6;
+                    clicked => {
+                        root.open_page(0);
+                    }
+                }
+
+                NavButton {
+                    width: parent.width;
+                    text: "Library";
+                    selected: page == 2;
+                    clicked => {
+                        root.open_page(2);
+                    }
+                }
+
+                NavButton {
+                    width: parent.width;
+                    text: "Settings";
+                    selected: page == 3;
+                    clicked => {
+                        root.open_page(3);
+                    }
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: border_color;
+                }
+
+                Text {
+                    text: busy ? "Working..." : "Idle";
+                    color: muted_text_color;
+                    height: 28px;
+                    font-size: 13px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Rectangle {
+            background: background_color;
+
+            Rectangle {
+                x: 24px;
+                y: 20px;
+                width: parent.width - 48px;
+                height: parent.height - 40px;
+                background: transparent;
+
+                if page == 0: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 14px;
+
+                        SectionTitle {
+                            text: "Search repositories";
+                            title_color: text_color;
+                            height: 34px;
+                        }
+
+                        HorizontalLayout {
+                            height: 44px;
+                            spacing: 10px;
+
+                            LineEdit {
+                                text <=> root.search_query;
+                                placeholder-text: "Search GitHub, GitLab, or Internet Archive";
+                            }
+
+                            ActionButton {
+                                width: 118px;
+                                text: "Search";
+                                primary: true;
+                                clicked => {
+                                    root.request_search(root.search_query, root.provider_index);
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            height: 38px;
+                            spacing: 8px;
+
+                            ActionButton {
+                                width: 94px;
+                                text: "GitHub";
+                                primary: root.provider_index == 0;
+                                clicked => {
+                                    root.provider_index = 0;
+                                }
+                            }
+
+                            ActionButton {
+                                width: 94px;
+                                text: "GitLab";
+                                primary: root.provider_index == 1;
+                                clicked => {
+                                    root.provider_index = 1;
+                                }
+                            }
+
+                            ActionButton {
+                                width: 148px;
+                                text: "Internet Archive";
+                                primary: root.provider_index == 2;
+                                clicked => {
+                                    root.provider_index = 2;
+                                }
+                            }
+                        }
+
+                        if repo_results.length == 0: EmptyState {
+                            width: parent.width;
+                            message: "Search results will appear here.";
+                        }
+
+                        ListView {
+                            for row[i] in repo_results: Rectangle {
+                                width: parent.width;
+                                height: 92px;
+                                border-radius: 8px;
+                                background: repo_touch.has-hover ? hover_surface_color : surface_color;
+                                border-width: 1px;
+                                border-color: border_color;
+
+                                VerticalLayout {
+                                    x: 16px;
+                                    y: 10px;
+                                    width: parent.width - 32px;
+                                    height: parent.height - 20px;
+                                    spacing: 4px;
+
+                                    Text {
+                                        text: row.title;
+                                        color: text_color;
+                                        font-size: 17px;
+                                        font-weight: 700;
+                                        height: 24px;
+                                        overflow: elide;
+                                    }
+
+                                    Text {
+                                        text: row.subtitle;
+                                        color: muted_text_color;
+                                        font-size: 13px;
+                                        height: 20px;
+                                        overflow: elide;
+                                    }
+
+                                    Text {
+                                        text: row.description;
+                                        color: muted_text_color;
+                                        font-size: 13px;
+                                        height: 28px;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                repo_touch := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    clicked => {
+                                        root.request_repo_details(i);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if page == 1: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 12px;
+
+                        SectionTitle {
+                            text: repo_title;
+                            title_color: text_color;
+                            height: 34px;
+                        }
+
+                        Text {
+                            text: repo_description;
+                            color: muted_text_color;
+                            font-size: 14px;
+                            wrap: word-wrap;
+                            height: 58px;
+                        }
+
+                        HorizontalLayout {
+                            width: parent.width;
+                            height: parent.height - 190px;
+                            spacing: 14px;
+
+                            Rectangle {
+                                width: parent.width / 2 - 7px;
+                                background: transparent;
+
+                                VerticalLayout {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    spacing: 8px;
+
+                                    Text {
+                                        text: "Releases";
+                                        height: 24px;
+                                        color: text_color;
+                                        font-size: 17px;
+                                        font-weight: 700;
+                                    }
+
+                                    if release_options.length == 0: EmptyState {
+                                        width: parent.width;
+                                        message: "No releases or downloadable files were found.";
+                                    }
+
+                                    ListView {
+                                        for option[i] in release_options: Rectangle {
+                                            width: parent.width;
+                                            height: 62px;
+                                            border-radius: 8px;
+                                            background: selected_release == i ? selected_surface_color : release_touch.has-hover ? hover_surface_color : surface_color;
+                                            border-width: 1px;
+                                            border-color: selected_release == i ? accent_color : border_color;
+
+                                            VerticalLayout {
+                                                x: 14px;
+                                                y: 8px;
+                                                width: parent.width - 28px;
+                                                height: parent.height - 16px;
+                                                spacing: 2px;
+                                                Text {
+                                                    text: option.title;
+                                                    color: text_color;
+                                                    font-size: 15px;
+                                                    font-weight: 700;
+                                                    height: 22px;
+                                                    overflow: elide;
+                                                }
+                                                Text {
+                                                    text: option.subtitle;
+                                                    color: muted_text_color;
+                                                    font-size: 12px;
+                                                    height: 18px;
+                                                    overflow: elide;
+                                                }
+                                            }
+
+                                            release_touch := TouchArea {
+                                                width: parent.width;
+                                                height: parent.height;
+                                                clicked => {
+                                                    root.selected_release = i;
+                                                    root.selected_file = -1;
+                                                    root.request_release_selected(i);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: parent.width / 2 - 7px;
+                                background: transparent;
+
+                                VerticalLayout {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    spacing: 8px;
+
+                                    Text {
+                                        text: "Files";
+                                        height: 24px;
+                                        color: text_color;
+                                        font-size: 17px;
+                                        font-weight: 700;
+                                    }
+
+                                    if file_options.length == 0: EmptyState {
+                                        width: parent.width;
+                                        message: "Choose a release to see downloadable files.";
+                                    }
+
+                                    ListView {
+                                        for option[i] in file_options: Rectangle {
+                                            width: parent.width;
+                                            height: 62px;
+                                            border-radius: 8px;
+                                            background: selected_file == i ? selected_surface_color : file_touch.has-hover ? hover_surface_color : surface_color;
+                                            border-width: 1px;
+                                            border-color: selected_file == i ? accent_color : border_color;
+
+                                            VerticalLayout {
+                                                x: 14px;
+                                                y: 8px;
+                                                width: parent.width - 28px;
+                                                height: parent.height - 16px;
+                                                spacing: 2px;
+                                                Text {
+                                                    text: option.title;
+                                                    color: text_color;
+                                                    font-size: 15px;
+                                                    font-weight: 700;
+                                                    height: 22px;
+                                                    overflow: elide;
+                                                }
+                                                Text {
+                                                    text: option.subtitle;
+                                                    color: muted_text_color;
+                                                    font-size: 12px;
+                                                    height: 18px;
+                                                    overflow: elide;
+                                                }
+                                            }
+
+                                            file_touch := TouchArea {
+                                                width: parent.width;
+                                                height: parent.height;
+                                                clicked => {
+                                                    root.selected_file = i;
+                                                    root.request_file_selected(i);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            height: 40px;
+                            spacing: 10px;
+
+                            ActionButton {
+                                width: 118px;
+                                text: "Download";
+                                primary: true;
+                                enabled: selected_release >= 0 && selected_file >= 0 && !busy;
+                                clicked => {
+                                    root.request_download(root.selected_release, root.selected_file);
+                                }
+                            }
+
+                            ActionButton {
+                                width: 134px;
+                                text: "Back";
+                                clicked => {
+                                    root.open_page(0);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if page == 2: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 14px;
+
+                        HorizontalLayout {
+                            height: 38px;
+                            spacing: 10px;
+                            SectionTitle {
+                                text: "Library";
+                                title_color: text_color;
+                            }
+                            ActionButton {
+                                width: 108px;
+                                text: "Refresh";
+                                clicked => {
+                                    root.request_library_refresh();
+                                }
+                            }
+                        }
+
+                        if library_apps.length == 0: EmptyState {
+                            width: parent.width;
+                            message: "Library is empty. Download something from the Search tab.";
+                        }
+
+                        ListView {
+                            for app[i] in library_apps: Rectangle {
+                                width: parent.width;
+                                height: 176px;
+                                border-radius: 8px;
+                                background: surface_color;
+                                border-width: 1px;
+                                border-color: border_color;
+
+                                Rectangle {
+                                    x: 12px;
+                                    y: 12px;
+                                    width: 326px;
+                                    height: 152px;
+                                    border-radius: 8px;
+                                    clip: true;
+                                    background: placeholder_color;
+
+                                    if app.has_artwork: Image {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        source: app.artwork;
+                                        image-fit: cover;
+                                    }
+
+                                    if !app.has_artwork: Text {
+                                        width: parent.width - 24px;
+                                        height: parent.height;
+                                        x: 12px;
+                                        text: app.name;
+                                        color: text_color;
+                                        font-size: 18px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
+                                        wrap: word-wrap;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    x: 358px;
+                                    y: 18px;
+                                    width: parent.width - 374px;
+                                    height: parent.height - 36px;
+                                    spacing: 8px;
+
+                                    Text {
+                                        text: app.name;
+                                        color: text_color;
+                                        font-size: 20px;
+                                        font-weight: 700;
+                                        height: 28px;
+                                        overflow: elide;
+                                    }
+
+                                    Text {
+                                        text: app.executable;
+                                        color: muted_text_color;
+                                        font-size: 12px;
+                                        height: 26px;
+                                        overflow: elide;
+                                    }
+
+                                    HorizontalLayout {
+                                        height: 38px;
+                                        spacing: 8px;
+                                        ActionButton {
+                                            width: 92px;
+                                            text: "Launch";
+                                            primary: true;
+                                            clicked => {
+                                                root.request_launch_app(i);
+                                            }
+                                        }
+                                        ActionButton {
+                                            width: 104px;
+                                            text: "Artwork";
+                                            clicked => {
+                                                root.request_change_artwork(i);
+                                            }
+                                        }
+                                        ActionButton {
+                                            width: 112px;
+                                            text: "Cloud Save";
+                                            clicked => {
+                                                root.request_choose_cloud_save(i);
+                                            }
+                                        }
+                                        ActionButton {
+                                            width: 86px;
+                                            text: "Sync";
+                                            clicked => {
+                                                root.request_sync_cloud_save(i);
+                                            }
+                                        }
+                                        ActionButton {
+                                            width: 86px;
+                                            text: "Delete";
+                                            danger: true;
+                                            clicked => {
+                                                root.pending_delete_index = i;
+                                                root.pending_delete_name = app.name;
+                                                root.pending_delete_visible = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if page == 3: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 14px;
+
+                        SectionTitle {
+                            text: "Settings";
+                            title_color: text_color;
+                            height: 34px;
+                        }
+
+                        Text {
+                            text: "SteamGridDB API key";
+                            height: 22px;
+                            color: text_color;
+                            font-size: 15px;
+                            font-weight: 700;
+                        }
+
+                        LineEdit {
+                            height: 40px;
+                            text <=> root.steamgriddb_api_key;
+                            placeholder-text: "Paste your SteamGridDB API key";
+                        }
+
+                        CheckBox {
+                            height: 34px;
+                            text: "Fullscreen on launch";
+                            checked <=> root.fullscreen_enabled;
+                        }
+
+                        HorizontalLayout {
+                            height: 40px;
+                            spacing: 10px;
+                            ActionButton {
+                                width: 128px;
+                                text: "Save Settings";
+                                primary: true;
+                                clicked => {
+                                    root.request_save_settings(root.steamgriddb_api_key, root.fullscreen_enabled);
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "Themes";
+                            height: 28px;
+                            color: text_color;
+                            font-size: 17px;
+                            font-weight: 700;
+                        }
+
+                        if themes.length == 0: EmptyState {
+                            width: parent.width;
+                            message: "No themes are available.";
+                        }
+
+                        ListView {
+                            for theme[i] in themes: Rectangle {
+                                width: parent.width;
+                                height: 48px;
+                                border-radius: 8px;
+                                background: theme_touch.has-hover ? hover_surface_color : surface_color;
+                                border-width: 1px;
+                                border-color: border_color;
+
+                                Text {
+                                    x: 14px;
+                                    width: parent.width - 28px;
+                                    height: parent.height;
+                                    text: theme.name;
+                                    color: text_color;
+                                    font-size: 15px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+
+                                theme_touch := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    clicked => {
+                                        root.request_theme(i);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if page == 4: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 14px;
+
+                        SectionTitle {
+                            text: "Select executable";
+                            title_color: text_color;
+                            height: 34px;
+                        }
+
+                        Text {
+                            text: current_app_name;
+                            color: muted_text_color;
+                            font-size: 14px;
+                            height: 24px;
+                            overflow: elide;
+                        }
+
+                        if executable_options.length == 0: EmptyState {
+                            width: parent.width;
+                            message: "No executable was found in the downloaded files.";
+                        }
+
+                        ListView {
+                            for option[i] in executable_options: Rectangle {
+                                width: parent.width;
+                                height: 64px;
+                                border-radius: 8px;
+                                background: executable_touch.has-hover ? hover_surface_color : surface_color;
+                                border-width: 1px;
+                                border-color: border_color;
+
+                                VerticalLayout {
+                                    x: 14px;
+                                    y: 8px;
+                                    width: parent.width - 28px;
+                                    height: parent.height - 16px;
+                                    spacing: 2px;
+                                    Text {
+                                        text: option.title;
+                                        color: text_color;
+                                        font-size: 15px;
+                                        font-weight: 700;
+                                        height: 22px;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: option.subtitle;
+                                        color: muted_text_color;
+                                        font-size: 12px;
+                                        height: 18px;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                executable_touch := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    clicked => {
+                                        root.request_select_executable(i);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if page == 5: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 14px;
+
+                        SectionTitle {
+                            text: "Find artwork";
+                            title_color: text_color;
+                            height: 34px;
+                        }
+
+                        Text {
+                            text: current_app_name;
+                            color: muted_text_color;
+                            font-size: 14px;
+                            height: 22px;
+                            overflow: elide;
+                        }
+
+                        HorizontalLayout {
+                            height: 44px;
+                            spacing: 10px;
+
+                            LineEdit {
+                                text <=> root.artwork_query;
+                                placeholder-text: "Search SteamGridDB games";
+                            }
+
+                            ActionButton {
+                                width: 118px;
+                                text: "Search";
+                                primary: true;
+                                clicked => {
+                                    root.request_artwork_search(root.artwork_query);
+                                }
+                            }
+                        }
+
+                        if artwork_games.length == 0: EmptyState {
+                            width: parent.width;
+                            message: "SteamGridDB game matches will appear here.";
+                        }
+
+                        ListView {
+                            for game[i] in artwork_games: Rectangle {
+                                width: parent.width;
+                                height: 62px;
+                                border-radius: 8px;
+                                background: game_touch.has-hover ? hover_surface_color : surface_color;
+                                border-width: 1px;
+                                border-color: border_color;
+
+                                VerticalLayout {
+                                    x: 14px;
+                                    y: 8px;
+                                    width: parent.width - 28px;
+                                    height: parent.height - 16px;
+                                    spacing: 2px;
+                                    Text {
+                                        text: game.name;
+                                        color: text_color;
+                                        font-size: 15px;
+                                        font-weight: 700;
+                                        height: 22px;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: game.subtitle;
+                                        color: muted_text_color;
+                                        font-size: 12px;
+                                        height: 18px;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                game_touch := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    clicked => {
+                                        root.request_artwork_game(i);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if page == 6: Rectangle {
+                    width: parent.width;
+                    height: parent.height - 44px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 14px;
+
+                        HorizontalLayout {
+                            height: 40px;
+                            spacing: 10px;
+                            SectionTitle {
+                                text: "Choose artwork";
+                                title_color: text_color;
+                            }
+                            ActionButton {
+                                width: 98px;
+                                text: "Previous";
+                                enabled: artwork_page > 0;
+                                clicked => {
+                                    root.request_artwork_delta(-1);
+                                }
+                            }
+                            ActionButton {
+                                width: 74px;
+                                text: "Next";
+                                clicked => {
+                                    root.request_artwork_delta(1);
+                                }
+                            }
+                        }
+
+                        if artwork_images.length == 0: EmptyState {
+                            width: parent.width;
+                            message: "No landscape artwork found for this game.";
+                        }
+
+                        ListView {
+                            for art[i] in artwork_images: Rectangle {
+                                width: parent.width;
+                                height: 156px;
+                                border-radius: 8px;
+                                background: surface_color;
+                                border-width: 1px;
+                                border-color: border_color;
+
+                                Rectangle {
+                                    x: 12px;
+                                    y: 12px;
+                                    width: 284px;
+                                    height: 132px;
+                                    border-radius: 8px;
+                                    clip: true;
+                                    background: placeholder_color;
+
+                                    if art.has_preview: Image {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        source: art.preview;
+                                        image-fit: cover;
+                                    }
+
+                                    if !art.has_preview: Text {
+                                        width: parent.width - 24px;
+                                        height: parent.height;
+                                        x: 12px;
+                                        text: "Preview unavailable";
+                                        color: muted_text_color;
+                                        font-size: 13px;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
+                                        wrap: word-wrap;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    x: 314px;
+                                    y: 20px;
+                                    width: parent.width - 330px;
+                                    height: parent.height - 40px;
+                                    spacing: 8px;
+                                    Text {
+                                        text: art.dimensions;
+                                        color: text_color;
+                                        font-size: 16px;
+                                        font-weight: 700;
+                                        height: 24px;
+                                    }
+                                    Text {
+                                        text: art.url;
+                                        color: muted_text_color;
+                                        font-size: 12px;
+                                        height: 28px;
+                                        overflow: elide;
+                                    }
+                                    ActionButton {
+                                        width: 118px;
+                                        text: "Apply";
+                                        primary: true;
+                                        clicked => {
+                                            root.request_apply_artwork(i);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    y: parent.height - 34px;
+                    width: parent.width;
+                    height: progress_visible ? 8px : 0px;
+                    background: progress_track_color;
+                    border-radius: 4px;
+                    clip: true;
+
+                    Rectangle {
+                        height: parent.height;
+                        width: parent.width * progress;
+                        background: accent_color;
+                        border-radius: 4px;
+                    }
+                }
+
+                Text {
+                    y: parent.height - 22px;
+                    width: parent.width;
+                    height: 22px;
+                    text: status_text;
+                    color: muted_text_color;
+                    font-size: 12px;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+
+    if pending_delete_visible: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: overlay_color;
+
+        modal_blocker := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => {}
+        }
+
+        Rectangle {
+            width: 560px;
+            height: 390px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 8px;
+            background: modal_color;
+            border-width: 2px;
+            border-color: danger_color;
+
+            VerticalLayout {
+                x: 28px;
+                y: 24px;
+                width: parent.width - 56px;
+                height: parent.height - 48px;
+                spacing: 18px;
+
+                Text {
+                    height: 54px;
+                    text: "ARE YOU SURE?";
+                    color: danger_text_color;
+                    font-size: 38px;
+                    font-weight: 900;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    height: 58px;
+                    text: "Delete " + pending_delete_name + "?";
+                    color: text_color;
+                    font-size: 18px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    height: 42px;
+                    text: "This removes the downloaded application folder and its saved launcher entry.";
+                    color: muted_text_color;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                BigDeleteButton {
+                    width: parent.width;
+                    text: "DELETE";
+                    clicked => {
+                        root.pending_delete_visible = false;
+                        root.request_delete_app(root.pending_delete_index);
+                        root.pending_delete_index = -1;
+                        root.pending_delete_name = "";
+                    }
+                }
+
+                ActionButton {
+                    width: parent.width;
+                    text: "Cancel";
+                    clicked => {
+                        root.pending_delete_visible = false;
+                        root.pending_delete_index = -1;
+                        root.pending_delete_name = "";
+                    }
+                }
+            }
+        }
+    }
+
+    if pending_download_visible: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: overlay_color;
+
+        rename_modal_blocker := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => {}
+        }
+
+        Rectangle {
+            width: 600px;
+            height: 314px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 8px;
+            background: modal_color;
+            border-width: 1px;
+            border-color: accent_color;
+
+            VerticalLayout {
+                x: 28px;
+                y: 24px;
+                width: parent.width - 56px;
+                height: parent.height - 48px;
+                spacing: 14px;
+
+                Text {
+                    height: 36px;
+                    text: "Already exists";
+                    color: text_color;
+                    font-size: 28px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    height: 58px;
+                    text: pending_download_original + " already exists. What would you like to name its folder?";
+                    color: muted_text_color;
+                    font-size: 15px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                LineEdit {
+                    height: 42px;
+                    text <=> root.pending_download_name;
+                    placeholder-text: "Folder name";
+                }
+
+                ActionButton {
+                    width: parent.width;
+                    text: "Download Here";
+                    primary: true;
+                    enabled: pending_download_name != "" && !busy;
+                    clicked => {
+                        root.request_download_named(root.pending_download_release, root.pending_download_file, root.pending_download_name);
+                    }
+                }
+
+                ActionButton {
+                    width: parent.width;
+                    text: "Cancel";
+                    clicked => {
+                        root.pending_download_visible = false;
+                        root.pending_download_release = -1;
+                        root.pending_download_file = -1;
+                        root.pending_download_name = "";
+                        root.pending_download_original = "";
+                    }
+                }
+            }
+        }
+    }
+}

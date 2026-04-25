@@ -1,9 +1,37 @@
-/saves
-/applications
-/build
-/dist
-/themes
-/ThemeCreator/projects
-/ThemeCreator/themes
-RepoRocket.spec
-ThemeCreator.spec
+# Rust build output
+/target/
+
+# Packaged builds
+/dist/
+/build/
+
+# RepoRocket runtime data
+/applications/
+/saves/
+/themes/
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and crash dumps
+*.log
+*.dmp
+*.tmp
+*.bak
+
+# Legacy Python build artifacts, kept ignored for old local worktrees
+*.spec
+__pycache__/
+*.py[cod]

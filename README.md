@@ -1,70 +1,79 @@
-# RepoRocket 🚀
+# RepoRocket
 
-**RepoRocket** is a cross-platform application manager that allows users to **install, update, and organize software directly from GitHub, GitLab, and other Git-based repositories**. Designed for flexibility, it simplifies managing open-source applications while offering customization options for users.
+RepoRocket is a native Rust and Slint desktop launcher for finding, downloading, organizing, and launching apps from GitHub, GitLab, and Internet Archive.
 
-## 🔹 Features:
-- **Repository-Based Installation** – Download and update applications directly from Git sources.
-- **Multi-Release Support** – Choose between stable, beta, and nightly builds.
-- **App Management** – Launch, rename, and customize applications with custom artwork.
-- **Flatpak & AppImage Integration** – Install Linux applications with ease.
-## Setup
+## Features
 
-### Prerequisites
-- Python 3.6 or higher
-- Pip (Python package installer)
+- Search GitHub, GitLab, and Internet Archive.
+- Browse releases and downloadable files.
+- Download files into isolated `applications/<app>/<app>` folders.
+- Prompt for a new folder name when a download would collide with an existing app.
+- Extract `.zip` downloads and flatten the common single-folder archive layout.
+- Pick an executable after download and launch apps from the library.
+- Delete apps with a confirmation dialog.
+- Add and sync per-app cloud save folders into `saves/<app>`.
+- Search SteamGridDB and apply custom library artwork using the `steamgriddb_api` crate.
+- Use built-in Default Dark and Default Light themes, plus optional custom themes.
 
-### Installation
-1. **Clone the Repository**:
-    ```bash
-    git clone https://github.com/yourusername/reporocket.git
-    cd reporocket
-    ```
+## Requirements
 
-2. **Install Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+- Rust 1.88 or newer.
+- A SteamGridDB API key for artwork search.
 
-### Running the Application
-To run the application, execute the following command:
+SteamGridDB keys can be set in the Settings screen or through the `STEAMGRIDDB_API_KEY` environment variable.
+
+## Running
+
 ```bash
-python RepoRocket.py
+cargo run
 ```
 
-## Building the Application
+## Building
 
-### Windows
-1. **Navigate to the Scripts Directory**:
-    ```bash
-    cd scripts
-    ```
+```bash
+cargo build --release
+```
 
-2. **Run the Build Script**:
-    ```bat
-    build_windows.bat
-    ```
+The release binary is created under `target/release`.
 
-### Linux
-1. **Navigate to the Scripts Directory**:
-    ```bash
-    cd scripts
-    ```
+The scripts in `scripts/` package the release binary and the `img/` assets into `dist/`:
 
-2. **Run the Build Script**:
-    ```bash
-    ./build_linux.sh
-    ```
+```bash
+scripts/compile_linux.sh
+scripts\compile_windows.bat
+```
 
-## Directory Structure
-- `applications/`: Stores downloaded GitHub applications.
-- `saves/`: Stores save files for applications, synced with Steam Cloud.
-- `img/`: Images for the launcher UI.
-- `scripts/`: Build scripts for Windows and Linux.
+## Runtime Folders
 
-## Contributing
-Contributions are welcome! Please fork the repository and submit a pull request with your changes.
+- `applications/`: downloaded applications.
+- `saves/reporocket/config.json`: executable paths and cloud save folders.
+- `saves/reporocket/settings.json`: UI settings and SteamGridDB key.
+- `saves/reporocket/artwork/`: selected library artwork.
+- `saves/reporocket/errorlogs.json`: recoverable runtime errors.
+- `themes/`: optional custom `theme.yaml` folders.
+
+## Custom Themes
+
+Custom themes are read from `themes/<theme-name>/theme.yaml`. Supported keys include:
+
+```yaml
+main-background: "#101419"
+panel-background: "#0b0f14"
+button-color: "#17202b"
+button-hover-color: "#202a37"
+text-color: "#f6f8fb"
+muted-text-color: "#aeb8c5"
+accent-color: "#2f5f8f"
+border-color: "#283241"
+selected-surface-color: "#284b72"
+placeholder-color: "#222b36"
+progress-track-color: "#202832"
+overlay-color: "#050607"
+modal-color: "#1b222c"
+danger-color: "#d64040"
+danger-text-color: "#ff5a5a"
+```
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-![logo](https://github.com/user-attachments/assets/e933c40b-98d0-41d7-bba3-cffcfa00da33)
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
