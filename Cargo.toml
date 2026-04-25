@@ -1,6 +1,6 @@
 [package]
-name = "reporocket"
-version = "0.1.0"
+name = "RepoRocket"
+version = "1.0.0"
 edition = "2021"
 build = "build.rs"
 
