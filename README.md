@@ -1,5 +1,11 @@
 # RepoRocket
 
+[![GitHub release](https://img.shields.io/github/v/release/Aspenini/RepoRocket?style=flat-square&logo=github)](https://github.com/Aspenini/RepoRocket/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Aspenini/RepoRocket/total?style=flat-square)](https://github.com/Aspenini/RepoRocket/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/Aspenini/RepoRocket/build.yml?branch=main&style=flat-square&label=build)](https://github.com/Aspenini/RepoRocket/actions/workflows/build.yml)
+[![License](https://img.shields.io/github/license/Aspenini/RepoRocket?style=flat-square)](https://github.com/Aspenini/RepoRocket/blob/main/LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.88+-CE412B?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+
 RepoRocket is a native Rust and Slint desktop launcher for finding, downloading, organizing, and launching apps from GitHub, GitLab, and Internet Archive.
 
 ## Features
