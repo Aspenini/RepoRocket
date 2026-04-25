@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 use anyhow::{anyhow, Context, Result};
 use reqwest::blocking::Client as HttpClient;
 use serde::de::DeserializeOwned;
