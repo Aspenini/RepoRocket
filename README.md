@@ -80,6 +80,10 @@ danger-color: "#d64040"
 danger-text-color: "#ff5a5a"
 ```
 
+## Disclaimer
+
+If you see a retired app on Steam by the same name, that's from when I tried to put this on Steam for cloud saves. Lets just say they didn't like it very much and gave it the boot. appID is `3513390`
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
