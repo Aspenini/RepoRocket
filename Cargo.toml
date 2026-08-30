@@ -1,22 +1,43 @@
 [package]
 name = "reporocket"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.92"
 build = "build.rs"
+description = "Native desktop launcher for GitHub, GitLab, and Internet Archive apps"
+license = "MIT"
+repository = "https://github.com/Aspenini/RepoRocket"
 
 [dependencies]
-anyhow = "1.0"
-open = "5.3"
-reqwest = { version = "0.11", features = ["blocking", "json"] }
+anyhow = "1"
+open = "5"
+percent-encoding = "2"
 rfd = "0.15"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_yaml = "0.9"
-slint = "1.16.1"
-steamgriddb_api = { version = "0.3.1", default-features = false, features = ["blocking"] }
-urlencoding = "2.1"
-walkdir = "2.5"
-zip = "2.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+slint = { version = "1.17", default-features = false, features = [
+    "std",
+    "backend-winit",
+    "renderer-femtovg",
+    "compat-1-2",
+    "accessibility",
+] }
+ureq = { version = "3", features = ["json"] }
+url = "2"
+zip = { version = "2", default-features = false, features = ["deflate", "deflate64"] }
 
 [build-dependencies]
-slint-build = "1.16.1"
+slint-build = "1.17"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 2
